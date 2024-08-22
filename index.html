@@ -17,10 +17,9 @@
             <div class="canvas-all-container">
                 <div class="canvas-all-container-top-side">
                     <input type="file" id="fileInput" accept="image/*,.pdf">
-                    <button id="clearButton">Clear</button> <!-- Clear butonu eklendi -->
+                    <button id="clearButton">Clear</button>
                 </div>
                 <div id="canvasContainer">
-
                     <canvas id="canvas"></canvas>
                 </div>
             </div>
@@ -28,23 +27,34 @@
                 <h2>Results</h2>
                 <div id="results">
                     <div id="resultsContainer">
-                        <div id="resultsTable"><div class="resultsRow header">
-                            <div class="resultsCell">#</div>
-                            <div class="resultsCell">X1</div>
-                            <div class="resultsCell">Y1</div>
-                            <div class="resultsCell">X2</div>
-                            <div class="resultsCell">Y2</div>
-                            <div class="resultsCell">Width</div>
-                            <div class="resultsCell">Height</div>
-                        </div>
+                        <div id="resultsTable">
+                            <div class="resultsRow header">
+                                <div class="resultsCell">#</div>
+                                <div class="resultsCell">X1</div>
+                                <div class="resultsCell">Y1</div>
+                                <div class="resultsCell">X2</div>
+                                <div class="resultsCell">Y2</div>
+                                <div class="resultsCell">Width</div>
+                                <div class="resultsCell">Height</div>
+                            </div>
                         </div>
                     </div>
                 </div>
-                <!-- PDF.js kütüphanesini ekleyin -->
             </div>
         </div>
+        <!-- Ses dosyası için audio elementi -->
+        <audio id="click-sound" src="click-sound.mp3"></audio>
+        
         <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.1.81/pdf.min.js"></script>
         <script src="script.js"></script>
+        <script>
+            // Sayfa genelinde tıklama sesini oynatacak event listener
+            document.addEventListener('click', function() {
+                var sound = document.getElementById('click-sound');
+                sound.play();
+            });
+        </script>
+    </div>
 </body>
 
 </html>
