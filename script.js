@@ -36,6 +36,7 @@ function loadImage(file) {
             canvas.height = img.height;
             ctx.drawImage(img, 0, 0);
             imageData = ctx.getImageData(0, 0, canvas.width, canvas.height); // Görüntüyü sakla
+            draw(); // Yeni görüntüyü çiz
         }
     };
     reader.readAsDataURL(file);
@@ -44,10 +45,10 @@ function loadImage(file) {
 function loadPDF(file) {
     const reader = new FileReader();
     reader.onload = function(e) {
-        const loadingTask = pdfjsLib.getDocument({data: e.target.result});
+        const loadingTask = pdfjsLib.getDocument({ data: e.target.result });
         loadingTask.promise.then(function(pdf) {
             pdf.getPage(1).then(function(page) {
-                const viewport = page.getViewport({scale: 1});
+                const viewport = page.getViewport({ scale: 1.5 });
                 canvas.width = viewport.width;
                 canvas.height = viewport.height;
 
@@ -57,6 +58,7 @@ function loadPDF(file) {
                 };
                 page.render(renderContext).promise.then(() => {
                     imageData = ctx.getImageData(0, 0, canvas.width, canvas.height); // Görüntüyü sakla
+                    draw(); // Yeni görüntüyü çiz
                 });
             });
         });
@@ -65,44 +67,28 @@ function loadPDF(file) {
 }
 
 canvas.addEventListener('mousedown', (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    // Kontrol - Değişkenin tanımlı olduğundan emin ol
-    if (typeof isDrawing === 'undefined') {
-        console.error('isDrawing değişkeni tanımlı değil!');
-        isDrawing = false; // Tanımlanmadıysa varsayılan değeri ata
-    }
+    const { x, y } = getMousePos(e);
 
     selectedRect = getRectangleAt(x, y);
-    resizingCorner = getResizingCorner(x, y, selectedRect); // Yeniden boyutlandırma köşesi kontrolü
-    
+    resizingCorner = getResizingCorner(x, y, selectedRect);
+
     if (resizingCorner) {
-        isDragging = false; // Sürükleme modunu kapat
-        isDrawing = false;
-    } else if (isDrawing) {
-        endX = x;
-        endY = y;
-        drawRect(startX, startY, endX - startX, endY - startY);
+        isDragging = false;
         isDrawing = false;
     } else if (selectedRect) {
-        if (!resizingCorner) {
-            isDragging = true;
-            startX = x - selectedRect.x;
-            startY = y - selectedRect.y;
-        }
+        isDragging = true;
+        isDrawing = false;
+        startX = x - selectedRect.x;
+        startY = y - selectedRect.y;
     } else {
+        isDrawing = true;
         startX = x;
         startY = y;
-        isDrawing = true;
     }
 });
 
 canvas.addEventListener('mousemove', (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const { x, y } = getMousePos(e);
 
     if (isDrawing) {
         endX = x;
@@ -112,18 +98,43 @@ canvas.addEventListener('mousemove', (e) => {
         selectedRect.x = x - startX;
         selectedRect.y = y - startY;
         draw();
+        updateResults();
     } else if (resizingCorner && selectedRect) {
         resizeRectangle(selectedRect, x, y, resizingCorner);
         draw();
+        updateResults();
     }
 });
 
 canvas.addEventListener('mouseup', () => {
+    if (isDrawing) {
+        const rect = normalizeRect(startX, startY, endX, endY);
+        rectangles.push(rect);
+        updateResults();
+    }
     isDrawing = false;
     isDragging = false;
     resizingCorner = null;
-    logCoordinates();
+    draw();
 });
+
+canvas.addEventListener('dblclick', (e) => {
+    const { x, y } = getMousePos(e);
+    const rect = getRectangleAt(x, y);
+    if (rect) {
+        rectangles = rectangles.filter(r => r !== rect);
+        draw();
+        updateResults();
+    }
+});
+
+function getMousePos(e) {
+    const rect = canvas.getBoundingClientRect();
+    return {
+        x: (e.clientX - rect.left) * (canvas.width / rect.width),
+        y: (e.clientY - rect.top) * (canvas.height / rect.height)
+    };
+}
 
 function getResizingCorner(x, y, rect) {
     if (!rect) return null;
@@ -135,9 +146,8 @@ function getResizingCorner(x, y, rect) {
         { x: rect.x + rect.width, y: rect.y + rect.height, name: 'bottom-right' }
     ];
 
-    // Tıklanan konum bir köşeye yakın mı kontrol et
     for (const corner of corners) {
-        if (Math.abs(x - corner.x) < 10 && Math.abs(y - corner.y) < 10) {
+        if (Math.hypot(x - corner.x, y - corner.y) < 10) {
             return corner.name;
         }
     }
@@ -168,55 +178,159 @@ function resizeRectangle(rect, x, y, corner) {
             rect.height = y - rect.y;
             break;
     }
+
+    // Negatif boyutları önlemek için
+    if (rect.width < 0) {
+        rect.x += rect.width;
+        rect.width *= -1;
+    }
+    if (rect.height < 0) {
+        rect.y += rect.height;
+        rect.height *= -1;
+    }
 }
 
 function draw() {
     if (imageData) {
         ctx.putImageData(imageData, 0, 0);
+    } else {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
     }
 
     rectangles.forEach(rect => {
-        ctx.strokeStyle = 'blue';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
-        ctx.fillStyle = 'red';
-        ctx.fillRect(rect.x - 5, rect.y - 5, 10, 10);
-        ctx.fillRect(rect.x + rect.width - 5, rect.y - 5, 10, 10);
-        ctx.fillRect(rect.x - 5, rect.y + rect.height - 5, 10, 10);
-        ctx.fillRect(rect.x + rect.width - 5, rect.y + rect.height - 5, 10, 10);
-
-        ctx.font = '12px Arial';
-        ctx.fillStyle = 'black';
-        ctx.fillText(`x1=${rect.x}, y1=${rect.y}`, rect.x + 10, rect.y - 10);
-        ctx.fillText(`x2=${rect.x + rect.width}, y2=${rect.y + rect.height}`, rect.x + rect.width + 10, rect.y - 10);
+        drawRectangle(rect);
     });
 
     if (isDrawing) {
-        ctx.strokeStyle = 'blue';
-        ctx.lineWidth = 2;
-        ctx.strokeRect(startX, startY, endX - startX, endY - startY);
-        ctx.fillStyle = 'red';
-        ctx.fillRect(startX - 5, startY - 5, 10, 10);
-        ctx.fillRect(endX - 5, endY - 5, 10, 10);
-        ctx.font = '12px Arial';
-        ctx.fillStyle = 'black';
-        ctx.fillText(`x1=${startX}, y1=${startY}`, startX + 10, startY - 10);
-        ctx.fillText(`x2=${endX}, y2=${endY}`, endX + 10, endY - 10);
+        const rect = normalizeRect(startX, startY, endX, endY);
+        drawRectangle(rect, true);
     }
 }
 
-function drawRect(x, y, width, height) {
-    rectangles.push({x, y, width, height});
-    draw(); // Çizimi güncelle
+function drawRectangle(rect, isTemp = false) {
+    ctx.strokeStyle = isTemp ? 'green' : 'blue';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+
+    // Köşe noktaları
+    ctx.fillStyle = 'red';
+    const corners = [
+        { x: rect.x, y: rect.y },
+        { x: rect.x + rect.width, y: rect.y },
+        { x: rect.x, y: rect.y + rect.height },
+        { x: rect.x + rect.width, y: rect.y + rect.height }
+    ];
+    corners.forEach(corner => {
+        ctx.fillRect(corner.x - 5, corner.y - 5, 10, 10);
+    });
 }
 
 function getRectangleAt(x, y) {
-    // Çizim alanındaki dikdörtgenleri kontrol et
-    return rectangles.find(rect => x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height);
+    return rectangles.find(rect =>
+        x >= rect.x &&
+        x <= rect.x + rect.width &&
+        y >= rect.y &&
+        y <= rect.y + rect.height
+    );
 }
 
-function logCoordinates() {
-    console.log(`Koordinatlar:`);
-    console.log(`Başlangıç noktası: x1=${startX}, y1=${startY}`);
-    console.log(`Bitiş noktası: x2=${endX}, y2=${endY}`);
+function normalizeRect(x1, y1, x2, y2) {
+    const x = Math.min(x1, x2);
+    const y = Math.min(y1, y2);
+    const width = Math.abs(x2 - x1);
+    const height = Math.abs(y2 - y1);
+    return { x, y, width, height };
 }
+
+function updateResults() {
+    const resultsTable = document.getElementById('resultsTable');
+
+    // Önce mevcut satırları temizle
+    resultsTable.innerHTML = `
+        <div class="resultsRow header">
+            <div class="resultsCell">#</div>
+            <div class="resultsCell">X1</div>
+            <div class="resultsCell">Y1</div>
+            <div class="resultsCell">X2</div>
+            <div class="resultsCell">Y2</div>
+            <div class="resultsCell">Width</div>
+            <div class="resultsCell">Height</div>
+        </div>
+    `;
+
+    rectangles.forEach((rect, index) => {
+        const row = document.createElement('div');
+        row.classList.add('resultsRow');
+
+        const cells = [
+            index + 1, // Sıra numarası
+            rect.x.toFixed(2),
+            rect.y.toFixed(2),
+            (rect.x + rect.width).toFixed(2),
+            (rect.y + rect.height).toFixed(2),
+            rect.width.toFixed(2),
+            rect.height.toFixed(2)
+        ];
+
+        cells.forEach(cellValue => {
+            const cell = document.createElement('div');
+            cell.classList.add('resultsCell');
+            cell.textContent = cellValue;
+            row.appendChild(cell);
+        });
+
+        resultsTable.appendChild(row);
+    });
+}
+
+function drawRectangle(rect, isTemp = false) {
+    ctx.strokeStyle = isTemp ? 'green' : 'blue';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+
+    // Köşe noktaları
+    ctx.fillStyle = 'red';
+    const corners = [
+        { x: rect.x, y: rect.y },
+        { x: rect.x + rect.width, y: rect.y },
+        { x: rect.x, y: rect.y + rect.height },
+        { x: rect.x + rect.width, y: rect.y + rect.height }
+    ];
+    corners.forEach(corner => {
+        ctx.fillRect(corner.x - 5, corner.y - 5, 10, 10);
+    });
+
+    // Koordinatları ve boyutları yazdırma
+    ctx.font = '12px Arial';
+    ctx.fillStyle = 'black';
+    ctx.fillText(`X1: ${rect.x.toFixed(2)}, Y1: ${rect.y.toFixed(2)}`, rect.x + 5, rect.y - 10);
+    ctx.fillText(`X2: ${(rect.x + rect.width).toFixed(2)}, Y2: ${(rect.y + rect.height).toFixed(2)}`, rect.x + rect.width + 5, rect.y + rect.height + 15);
+    ctx.fillText(`Width: ${rect.width.toFixed(2)}, Height: ${rect.height.toFixed(2)}`, rect.x + 5, rect.y + rect.height + 15);
+}
+
+function draw() {
+    if (imageData) {
+        ctx.putImageData(imageData, 0, 0);
+    } else {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+
+    rectangles.forEach(rect => {
+        drawRectangle(rect);
+    });
+
+    if (isDrawing) {
+        const rect = normalizeRect(startX, startY, endX, endY);
+        drawRectangle(rect, true);
+    }
+}
+
+const clearButton = document.getElementById('clearButton');
+clearButton.addEventListener('click', () => {
+    // Dikdörtgenleri temizle
+    rectangles = [];
+
+
+    // Sonuçları temizle
+    updateResults();
+});
