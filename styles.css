@@ -1,0 +1,26 @@
+#canvasContainer {
+    border: 1px solid black;
+    width: 595px; /* A4 boyutu genişliği */
+    height: 842px; /* A4 boyutu yüksekliği */
+    position: relative;
+    margin-top: 20px;
+}
+
+#canvas {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+}
+
+.marker {
+    width: 10px;
+    height: 10px;
+    background-color: red;
+    border-radius: 50%;
+    position: absolute;
+}
+
+.line {
+    stroke: blue;
+    stroke-width: 2;
+}
